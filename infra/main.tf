@@ -38,15 +38,15 @@ resource "azurerm_container_app_environment" "app" {
 }
 
 resource "azurerm_redis_cache" "app" {
-  name                = "redis-${var.project_name}"
-  location            = azurerm_resource_group.app.location
-  resource_group_name = azurerm_resource_group.app.name
-  capacity            = 0
-  family              = "C"
-  sku_name            = "Basic"
-  minimum_tls_version = "1.2"
+  name                 = "redis-${var.project_name}"
+  location             = azurerm_resource_group.app.location
+  resource_group_name  = azurerm_resource_group.app.name
+  capacity             = 0
+  family               = "C"
+  sku_name             = "Basic"
+  minimum_tls_version  = "1.2"
   non_ssl_port_enabled = false
-  tags                = var.tags
+  tags                 = var.tags
 }
 
 locals {
