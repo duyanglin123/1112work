@@ -25,7 +25,7 @@ resource "azurerm_log_analytics_workspace" "app" {
   location            = azurerm_resource_group.app.location
   resource_group_name = azurerm_resource_group.app.name
   sku                 = "PerGB2018"
-  retention_in_days   = 7
+  retention_in_days   = 30
   tags                = var.tags
 }
 
@@ -109,10 +109,12 @@ resource "azurerm_storage_account" "frontend" {
   min_tls_version          = "TLS1_2"
   tags                     = var.tags
 
-  static_website {
-    index_document     = "index.html"
-    error_404_document = "index.html"
-  }
+}
+
+resource "azurerm_storage_account_static_website" "frontend" {
+  storage_account_id = azurerm_storage_account.frontend.id
+  index_document     = "index.html"
+  error_404_document = "index.html"
 }
 
 resource "azurerm_storage_blob" "frontend_index" {
