@@ -1,0 +1,152 @@
+terraform {
+  required_version = ">= 1.6.0"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id
+}
+
+resource "azurerm_resource_group" "app" {
+  name     = "rg-${var.project_name}"
+  location = var.location
+  tags     = var.tags
+}
+
+resource "azurerm_log_analytics_workspace" "app" {
+  name                = "law-${var.project_name}"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 7
+  tags                = var.tags
+}
+
+resource "azurerm_container_app_environment" "app" {
+  name                       = "cae-${var.project_name}"
+  location                   = azurerm_resource_group.app.location
+  resource_group_name        = azurerm_resource_group.app.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.app.id
+  tags                       = var.tags
+}
+
+resource "azurerm_redis_cache" "app" {
+  name                = "redis-${var.project_name}"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  capacity            = 0
+  family              = "C"
+  sku_name            = "Basic"
+  minimum_tls_version = "1.2"
+  non_ssl_port_enabled = false
+  tags                = var.tags
+}
+
+locals {
+  frontend_origin = trimsuffix(azurerm_storage_account.frontend.primary_web_endpoint, "/")
+  allowed_origins = var.cors_origins != "" ? var.cors_origins : local.frontend_origin
+}
+
+resource "azurerm_container_app" "api" {
+  name                         = "api-${var.project_name}"
+  container_app_environment_id = azurerm_container_app_environment.app.id
+  resource_group_name          = azurerm_resource_group.app.name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  secret {
+    name  = "redis-url"
+    value = var.redis_url != "" ? var.redis_url : "rediss://:${urlencode(azurerm_redis_cache.app.primary_access_key)}@${azurerm_redis_cache.app.hostname}:6380/0"
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8000
+    transport        = "auto"
+
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+
+  template {
+    min_replicas = 0
+    max_replicas = 2
+
+    container {
+      name   = "api"
+      image  = var.api_image
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      env {
+        name        = "REDIS_URL"
+        secret_name = "redis-url"
+      }
+
+      env {
+        name  = "ALLOWED_ORIGINS"
+        value = local.allowed_origins
+      }
+    }
+  }
+}
+
+resource "azurerm_storage_account" "frontend" {
+  name                     = var.storage_account_name
+  resource_group_name      = azurerm_resource_group.app.name
+  location                 = azurerm_resource_group.app.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  min_tls_version          = "TLS1_2"
+  tags                     = var.tags
+
+  static_website {
+    index_document     = "index.html"
+    error_404_document = "index.html"
+  }
+}
+
+resource "azurerm_storage_blob" "frontend_index" {
+  name                   = "index.html"
+  storage_account_name   = azurerm_storage_account.frontend.name
+  storage_container_name = "$web"
+  type                   = "Block"
+  source                 = "${path.module}/../frontend/index.html"
+  content_type           = "text/html"
+}
+
+resource "azurerm_storage_blob" "frontend_script" {
+  name                   = "app.js"
+  storage_account_name   = azurerm_storage_account.frontend.name
+  storage_container_name = "$web"
+  type                   = "Block"
+  source                 = "${path.module}/../frontend/app.js"
+  content_type           = "application/javascript"
+}
+
+resource "azurerm_storage_blob" "frontend_styles" {
+  name                   = "styles.css"
+  storage_account_name   = azurerm_storage_account.frontend.name
+  storage_container_name = "$web"
+  type                   = "Block"
+  source                 = "${path.module}/../frontend/styles.css"
+  content_type           = "text/css"
+}
+
+resource "azurerm_storage_blob" "frontend_config" {
+  name                   = "config.js"
+  storage_account_name   = azurerm_storage_account.frontend.name
+  storage_container_name = "$web"
+  type                   = "Block"
+  source_content         = replace(file("${path.module}/../frontend/config.js"), "http://localhost:8000", "https://${azurerm_container_app.api.ingress[0].fqdn}")
+  content_type           = "application/javascript"
+}

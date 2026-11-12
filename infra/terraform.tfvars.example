@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars locally. Do not commit the filled file.
+subscription_id       = "00000000-0000-0000-0000-000000000000"
+project_name          = "taskboard"
+location              = "westeurope"
+storage_account_name  = "taskboardweb12345"
+api_image             = "ghcr.io/YOUR_USER/taskboard-api:latest"
+# Optional. Leave empty to use the Terraform-created Azure Cache for Redis.
+redis_url             = ""
+// cors_origins        = "https://your-static-site.example"
