@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+terraform.tfstate*
+.terraform/
+infra/terraform.tfvars
+.terraform.lock.hcl
+dist/
+.DS_Store
+dump.rdb
