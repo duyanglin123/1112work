@@ -35,18 +35,26 @@ resource "azurerm_container_app_environment" "app" {
   resource_group_name        = azurerm_resource_group.app.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.app.id
   tags                       = var.tags
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
 }
 
-resource "azurerm_redis_cache" "app" {
-  name                 = "redis-${var.project_name}"
-  location             = azurerm_resource_group.app.location
-  resource_group_name  = azurerm_resource_group.app.name
-  capacity             = 0
-  family               = "C"
-  sku_name             = "Basic"
-  minimum_tls_version  = "1.2"
-  non_ssl_port_enabled = false
-  tags                 = var.tags
+resource "azurerm_managed_redis" "app" {
+  name                      = "redis-${var.project_name}"
+  location                  = azurerm_resource_group.app.location
+  resource_group_name       = azurerm_resource_group.app.name
+  sku_name                  = "Balanced_B0"
+  high_availability_enabled = false
+  public_network_access     = "Enabled"
+  tags                      = var.tags
+
+  default_database {
+    access_keys_authentication_enabled = true
+    client_protocol                    = "Encrypted"
+  }
 }
 
 locals {
@@ -59,17 +67,35 @@ resource "azurerm_container_app" "api" {
   container_app_environment_id = azurerm_container_app_environment.app.id
   resource_group_name          = azurerm_resource_group.app.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = var.tags
 
   secret {
     name  = "redis-url"
-    value = var.redis_url != "" ? var.redis_url : "rediss://:${urlencode(azurerm_redis_cache.app.primary_access_key)}@${azurerm_redis_cache.app.hostname}:6380/0"
+    value = var.redis_url != "" ? var.redis_url : "rediss://:${urlencode(azurerm_managed_redis.app.default_database[0].primary_access_key)}@${azurerm_managed_redis.app.hostname}:${azurerm_managed_redis.app.default_database[0].port}/0"
+  }
+
+  dynamic "secret" {
+    for_each = var.registry_password != "" ? [1] : []
+    content {
+      name  = "registry-password"
+      value = var.registry_password
+    }
+  }
+
+  dynamic "registry" {
+    for_each = var.registry_server != "" ? [1] : []
+    content {
+      server               = var.registry_server
+      username             = var.registry_username
+      password_secret_name = "registry-password"
+    }
   }
 
   ingress {
     external_enabled = true
     target_port      = 8000
-    transport        = "auto"
+    transport        = "http"
 
     traffic_weight {
       percentage      = 100
@@ -108,7 +134,6 @@ resource "azurerm_storage_account" "frontend" {
   account_replication_type = "LRS"
   min_tls_version          = "TLS1_2"
   tags                     = var.tags
-
 }
 
 resource "azurerm_storage_account_static_website" "frontend" {
@@ -117,38 +142,40 @@ resource "azurerm_storage_account_static_website" "frontend" {
   error_404_document = "index.html"
 }
 
+data "azurerm_storage_container" "frontend" {
+  name               = "$web"
+  storage_account_id = azurerm_storage_account.frontend.id
+  depends_on         = [azurerm_storage_account_static_website.frontend]
+}
+
 resource "azurerm_storage_blob" "frontend_index" {
-  name                   = "index.html"
-  storage_account_name   = azurerm_storage_account.frontend.name
-  storage_container_name = "$web"
-  type                   = "Block"
-  source                 = "${path.module}/../frontend/index.html"
-  content_type           = "text/html"
+  name                 = "index.html"
+  storage_container_id = data.azurerm_storage_container.frontend.id
+  type                 = "Block"
+  source               = "${path.module}/../frontend/index.html"
+  content_type         = "text/html"
 }
 
 resource "azurerm_storage_blob" "frontend_script" {
-  name                   = "app.js"
-  storage_account_name   = azurerm_storage_account.frontend.name
-  storage_container_name = "$web"
-  type                   = "Block"
-  source                 = "${path.module}/../frontend/app.js"
-  content_type           = "application/javascript"
+  name                 = "app.js"
+  storage_container_id = data.azurerm_storage_container.frontend.id
+  type                 = "Block"
+  source               = "${path.module}/../frontend/app.js"
+  content_type         = "application/javascript"
 }
 
 resource "azurerm_storage_blob" "frontend_styles" {
-  name                   = "styles.css"
-  storage_account_name   = azurerm_storage_account.frontend.name
-  storage_container_name = "$web"
-  type                   = "Block"
-  source                 = "${path.module}/../frontend/styles.css"
-  content_type           = "text/css"
+  name                 = "styles.css"
+  storage_container_id = data.azurerm_storage_container.frontend.id
+  type                 = "Block"
+  source               = "${path.module}/../frontend/styles.css"
+  content_type         = "text/css"
 }
 
 resource "azurerm_storage_blob" "frontend_config" {
-  name                   = "config.js"
-  storage_account_name   = azurerm_storage_account.frontend.name
-  storage_container_name = "$web"
-  type                   = "Block"
-  source_content         = replace(file("${path.module}/../frontend/config.js"), "http://localhost:8000", "https://${azurerm_container_app.api.ingress[0].fqdn}")
-  content_type           = "application/javascript"
+  name                 = "config.js"
+  storage_container_id = data.azurerm_storage_container.frontend.id
+  type                 = "Block"
+  source_content       = replace(file("${path.module}/../frontend/config.js"), "http://localhost:8000", "https://${azurerm_container_app.api.ingress[0].fqdn}")
+  content_type         = "application/javascript"
 }
