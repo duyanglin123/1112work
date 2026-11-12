@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install -r api/requirements-dev.txt
+      - name: Run API tests
+        env:
+          PYTHONPATH: api
+        run: PYTHONPATH=api pytest -q api/tests
+      - name: Compile Python files
+        run: python -m compileall -q api/app
+      - name: Build API image
+        run: docker build -t taskboard-api:ci api
+      - name: Build frontend image
+        run: docker build -t taskboard-frontend:ci frontend
+      - name: Terraform formatting
+        uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra fmt -check -recursive
