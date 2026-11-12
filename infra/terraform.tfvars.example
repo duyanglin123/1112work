@@ -1,9 +1,14 @@
 # Copy to terraform.tfvars locally. Do not commit the filled file.
 subscription_id       = "00000000-0000-0000-0000-000000000000"
 project_name          = "taskboard"
-location              = "westeurope"
+location              = "spaincentral"
 storage_account_name  = "taskboardweb12345"
 api_image             = "ghcr.io/YOUR_USER/taskboard-api:latest"
-# Optional. Leave empty to use the Terraform-created Azure Cache for Redis.
+# Optional private registry settings. For Azure Container Registry, use the
+# login server and admin credentials returned by `az acr credential show`.
+registry_server       = ""
+registry_username     = ""
+registry_password     = ""
+# Optional. Leave empty to use the Terraform-created Azure Managed Redis.
 redis_url             = ""
-// cors_origins        = "https://your-static-site.example"
+# cors_origins        = "https://your-static-site.example"
