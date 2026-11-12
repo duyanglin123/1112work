@@ -9,8 +9,8 @@ output "frontend_url" {
 }
 
 output "redis_hostname" {
-  description = "Azure Cache for Redis hostname used by the API."
-  value       = azurerm_redis_cache.app.hostname
+  description = "Azure Managed Redis hostname used by the API."
+  value       = azurerm_managed_redis.app.hostname
 }
 
 output "resource_group_name" {
