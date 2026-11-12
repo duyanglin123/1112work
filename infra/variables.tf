@@ -18,12 +18,31 @@ variable "project_name" {
 variable "location" {
   description = "Azure region."
   type        = string
-  default     = "westeurope"
+  default     = "spaincentral"
 }
 
 variable "api_image" {
   description = "Fully qualified container image for the API, for example ghcr.io/user/taskboard-api:latest."
   type        = string
+}
+
+variable "registry_server" {
+  description = "Optional private registry hostname, for example taskboardacr.azurecr.io."
+  type        = string
+  default     = ""
+}
+
+variable "registry_username" {
+  description = "Optional private registry username."
+  type        = string
+  default     = ""
+}
+
+variable "registry_password" {
+  description = "Optional private registry password. Keep it in a local tfvars file."
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "redis_url" {
